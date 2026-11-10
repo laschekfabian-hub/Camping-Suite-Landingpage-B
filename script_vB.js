@@ -1,234 +1,175 @@
-fetch("https://api.open-meteo.com/v1/forecast")
-    .then(response => response.json())
-    .then(console.log)
 
-https://open-meteo.com/en/docs/dwd-api?hourly=temperature_2m,is_day,weather_code,snowfall,rain,sunshine_duration&daily=weather_code,sunrise,sunset,daylight_duration,sunshine_duration
+const url = "https://api.open-meteo.com/v1/forecast";
 
-// ==================================
-// 1. API-Einstellungen
-// ==================================
+const container = document.getElementById("wetter-container");
 
-const latitude = 53.70;
-const longitude = 10.00;
+// Standort ermitteln
+if ("geolocation" in navigator) {
 
-const url = new URL(
-    "https://api.open-meteo.com/v1/forecast"
-);
+    navigator.geolocation.getCurrentPosition(
 
-const params = {
-    latitude: latitude,
-    longitude: longitude,
+        function(position) {
 
-    current: [
-        "temperature_2m",
-        "relative_humidity_2m",
-        "weather_code",
-        "wind_speed_10m"
-    ],
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
 
-    daily: [
-        "weather_code",
-        "sunrise",
-        "sunset",
-        "daylight_duration",
-        "sunshine_duration"
-    ],
+            ladeWetter(latitude, longitude);
 
-    hourly: [
-        "temperature_2m",
-        "is_day",
-        "weather_code",
-        "snowfall",
-        "rain",
-        "sunshine_duration"
-    ],
+        },
 
-    models: "dwd_icon_seamless",
-    forecast_days: 7,
-    timezone: "auto"
-};
+        function(error) {
 
-url.search = new URLSearchParams(
-    Object.entries(params).map(([key, value]) => [
-        key,
-        Array.isArray(value) ? value.join(",") : value
-    ])
-).toString();
+            console.warn("Standort nicht verfügbar:", error.message);
 
+            // Ersatzstandort Berlin
+            ladeWetter(52.52, 13.41);
 
-// ==================================
-// 2. Wettercodes übersetzen
-// ==================================
+        }
+    );
 
-function getWeatherInfo(code) {
+} else {
 
-    const weather = {
-        0: ["☀️", "Sonnig"],
-        1: ["🌤️", "Überwiegend sonnig"],
-        2: ["⛅", "Teilweise bewölkt"],
-        3: ["☁️", "Bewölkt"],
-        45: ["🌫️", "Nebel"],
-        48: ["🌫️", "Nebel"],
-        51: ["🌦️", "Leichter Nieselregen"],
-        53: ["🌦️", "Nieselregen"],
-        55: ["🌧️", "Starker Nieselregen"],
-        61: ["🌧️", "Leichter Regen"],
-        63: ["🌧️", "Regen"],
-        65: ["🌧️", "Starker Regen"],
-        71: ["❄️", "Leichter Schneefall"],
-        73: ["❄️", "Schneefall"],
-        75: ["❄️", "Starker Schneefall"],
-        80: ["🌦️", "Regenschauer"],
-        81: ["🌧️", "Regenschauer"],
-        82: ["🌧️", "Starke Regenschauer"],
-        95: ["⛈️", "Gewitter"]
-    };
+    // Falls Browser keine Standortermittlung unterstützt
+    ladeWetter(52.52, 13.41);
 
-    return weather[code] || ["🌡️", "Unbekannt"];
 }
 
 
-// ==================================
-// 3. Wetterdaten abrufen
-// ==================================
+// Wetterdaten laden
+function ladeWetter(latitude, longitude) {
 
-async function loadWeather() {
+    container.innerHTML = "Wetterdaten werden geladen...";
 
-    try {
+    const params = {
 
-        const response = await fetch(url);
+        latitude: latitude,
+        longitude: longitude,
 
-        if (!response.ok) {
-            throw new Error("API-Fehler: " + response.status);
-        }
+        daily: [
+            "weather_code",
+            "sunrise",
+            "sunset",
+            "temperature_2m_max",
+            "temperature_2m_min",
+            "daylight_duration",
+            "sunshine_duration",
+            "wind_speed_10m_max"
+        ],
 
-        const data = await response.json();
+        hourly: [
+            "temperature_2m",
+            "rain",
+            "dew_point_2m",
+            "snowfall"
+        ],
 
-        console.log("API-Daten:", data);
+        models: "dwd_icon_seamless",
+        forecast_days: 7,
+        timezone: "auto"
+    };
 
+    const apiURL = url + "?" + new URLSearchParams({
 
-        // ==================================
-        // 4. Aktuelles Wetter anzeigen
-        // ==================================
+        ...params,
+        daily: params.daily.join(","),
+        hourly: params.hourly.join(",")
 
-        const current = data.current;
-
-        const info = getWeatherInfo(
-            current.weather_code
-        );
-
-        document.getElementById("temperature")
-            .textContent =
-            Math.round(current.temperature_2m) + " °C";
-
-        document.getElementById("weather-icon")
-            .textContent = info[0];
-
-        document.getElementById("description")
-            .textContent = info[1];
-
-        document.getElementById("humidity")
-            .textContent =
-            current.relative_humidity_2m + " %";
-
-        document.getElementById("wind")
-            .textContent =
-            current.wind_speed_10m + " km/h";
+    });
 
 
-        // ==================================
-        // 5. 7-Tage-Vorhersage anzeigen
-        // ==================================
+    fetch(apiURL)
 
-        const daily = data.daily;
+        .then(response => {
 
-        const container = document.getElementById(
-            "forecast-container"
-        );
+            if (!response.ok) {
+                throw new Error("API-Fehler: " + response.status);
+            }
 
-        container.innerHTML = "";
+            return response.json();
 
-        daily.time.forEach((date, index) => {
+        })
 
-            const weatherInfo = getWeatherInfo(
-                daily.weather_code[index]
-            );
+        .then(data => {
 
-            const day = new Date(
-                date + "T12:00:00"
-            );
+            console.log("Wetterdaten:", data);
 
-            const dayName = day.toLocaleDateString(
-                "de-DE",
-                { weekday: "short", day: "2-digit", month: "2-digit" }
-            );
+            const daily = data.daily;
 
-            const sunrise = new Date(
-                daily.sunrise[index]
-            ).toLocaleTimeString("de-DE", {
-                hour: "2-digit",
-                minute: "2-digit"
+            container.innerHTML = "";
+
+            daily.time.forEach((date, index) => {
+
+                const wetterCode = daily.weather_code[index];
+                const maxTemp = daily.temperature_2m_max[index];
+                const minTemp = daily.temperature_2m_min[index];
+                const sunrise = daily.sunrise[index];
+                const sunset = daily.sunset[index];
+                const wind = daily.wind_speed_10m_max[index];
+
+                const datum = new Date(date + "T12:00:00");
+
+                const datumText = datum.toLocaleDateString("de-DE", {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "long"
+                });
+
+                let wetterBeschreibung = "Unbekannt";
+
+                if (wetterCode === 0) {
+                    wetterBeschreibung = "Sonnig";
+                } else if ([1, 2].includes(wetterCode)) {
+                    wetterBeschreibung = "Teilweise bewölkt";
+                } else if (wetterCode === 3) {
+                    wetterBeschreibung = "Bewölkt";
+                } else if ([45, 48].includes(wetterCode)) {
+                    wetterBeschreibung = "Nebel";
+                } else if (wetterCode >= 51 && wetterCode <= 67) {
+                    wetterBeschreibung = "Regen";
+                } else if (wetterCode >= 71 && wetterCode <= 77) {
+                    wetterBeschreibung = "Schnee";
+                } else if (wetterCode >= 80 && wetterCode <= 82) {
+                    wetterBeschreibung = "Regenschauer";
+                } else if (wetterCode >= 95) {
+                    wetterBeschreibung = "Gewitter";
+                }
+
+                const karte = document.createElement("div");
+
+                karte.classList.add("wetter-karte");
+
+                karte.innerHTML = `
+
+                    <h2>${datumText}</h2>
+
+                    <p>${wetterBeschreibung}</p>
+
+                    <div class="temperatur">
+                        ${Math.round(minTemp)} °C /
+                        ${Math.round(maxTemp)} °C
+                    </div>
+
+                    <p>Sonnenaufgang: ${sunrise.split("T")[1]}</p>
+
+                    <p>Sonnenuntergang: ${sunset.split("T")[1]}</p>
+
+                    <p>Wind: ${wind} km/h</p>
+
+                `;
+
+                container.appendChild(karte);
+
             });
 
-            const sunset = new Date(
-                daily.sunset[index]
-            ).toLocaleTimeString("de-DE", {
-                hour: "2-digit",
-                minute: "2-digit"
-            });
+        })
 
-            const sunshineHours = (
-                daily.sunshine_duration[index] / 3600
-            ).toFixed(1);
+        .catch(error => {
 
-            const card = document.createElement("div");
+            console.error("Fehler beim Laden:", error);
 
-            card.className = "forecast-day";
-
-            card.innerHTML = `
-                <h3>${dayName}</h3>
-
-                <div class="icon">
-                    ${weatherInfo[0]}
-                </div>
-
-                <p>${weatherInfo[1]}</p>
-
-                <p>🌅 ${sunrise}</p>
-
-                <p>🌇 ${sunset}</p>
-
-                <p>☀️ ${sunshineHours} Std.</p>
-            `;
-
-            container.appendChild(card);
+            container.textContent =
+                "Die Wetterdaten konnten nicht geladen werden.";
 
         });
 
-    } catch (error) {
-
-        console.error("Wetterfehler:", error);
-
-        document.getElementById("description")
-            .textContent =
-            "Wetterdaten konnten nicht geladen werden.";
-
-        document.getElementById("forecast-container")
-            .textContent =
-            "Vorhersage momentan nicht verfügbar.";
-
-    }
-
 }
-
-
-// ==================================
-// 6. Funktion starten
-// ==================================
-
-loadWeather();
-
-
-// Alle 10 Minuten aktualisieren
-
-setInterval(loadWeather, 600000);
